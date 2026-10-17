@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MiniPC IPv6 Proxy Manager</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0fdf4',
+              500: '#22c55e',
+              600: '#16a34a',
+              700: '#15803d',
+            },
+            dark: {
+              bg: '#0f172a',
+              card: '#1e293b',
+              border: '#334155'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    /* Custom scrollbar cho terminal */
+    .terminal-scroll::-webkit-scrollbar {
+      width: 6px;
+    }
+    .terminal-scroll::-webkit-scrollbar-track {
+      background: #090d16;
+    }
+    .terminal-scroll::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased">
+
+  <!-- Header -->
+  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+          <i data-lucide="network" class="w-6 h-6 text-slate-950 stroke-[2.5]"></i>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold text-white leading-tight flex items-center gap-2">
+            IPv6 Proxy Manager
+            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">v1.0.0</span>
+          </h1>
+          <p class="text-xs text-slate-400">Trạm phát IPv6 Dân dụng Mini PC</p>
+        </div>
+      </div>
+
+      <!-- Quick Info & Action -->
+      <div class="flex items-center space-x-3">
+        <div id="lan-ip-badge" class="hidden sm:flex items-center space-x-2 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700 text-xs">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span class="text-slate-400">LAN IP:</span>
+          <span id="badge-lan-ip" class="font-mono font-semibold text-emerald-400">192.168.1.50</span>
+        </div>
+        <button id="btn-refresh-all" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 transition-colors" title="Làm mới dữ liệu">
+          <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+
+    <!-- Top KPI Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <!-- Card 1: IP LAN -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 relative overflow-hidden">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">IP LAN (Mini PC)</span>
+          <div class="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center">
+            <i data-lucide="server" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <div id="stat-lan-ip" class="text-xl font-bold font-mono text-white mt-2">--</div>
+        <div class="text-xs text-slate-400 mt-1 flex items-center gap-1">
+          <i data-lucide="arrow-right-left" class="w-3 h-3 text-slate-400"></i>
+          <span id="stat-iface">Card mạng: --</span>
+        </div>
+      </div>
+
+      <!-- Card 2: IPv6 Prefix /64 -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 relative overflow-hidden">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">Tiền tố IPv6 /64</span>
+          <div class="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+            <i data-lucide="globe" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <div id="stat-prefix" class="text-sm font-bold font-mono text-emerald-400 mt-2 truncate" title="Dải IPv6 nhà mạng cấp">Đang kiểm tra...</div>
+        <div class="text-xs text-slate-400 mt-1 flex items-center gap-1">
+          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          <span>Khoảng 18 tỷ tỷ địa chỉ</span>
+        </div>
+      </div>
+
+      <!-- Card 3: Số Proxy Đang Chạy -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 relative overflow-hidden">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">Proxy Hoạt Động</span>
+          <div class="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center">
+            <i data-lucide="layers" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <div id="stat-proxy-count" class="text-2xl font-bold text-white mt-2">0</div>
+        <div class="text-xs text-slate-400 mt-1">Cổng mở sẵn sàng kết nối</div>
+      </div>
+
+      <!-- Card 4: RAM Sử Dụng -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 relative overflow-hidden">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">Tài Nguyên Mini PC</span>
+          <div class="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center">
+            <i data-lucide="cpu" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <div id="stat-ram-text" class="text-xl font-bold text-white mt-2">-- / 2 GB</div>
+        <div class="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+          <div id="stat-ram-bar" class="bg-amber-400 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="flex border-b border-slate-800 space-x-8">
+      <button id="tab-btn-proxies" onclick="switchTab('proxies')" class="tab-button flex items-center space-x-2 py-3 border-b-2 border-emerald-500 text-emerald-400 font-medium text-sm transition-colors">
+        <i data-lucide="list" class="w-4 h-4"></i>
+        <span>Danh Sách Proxy</span>
+      </button>
+      <button id="tab-btn-system" onclick="switchTab('system')" class="tab-button flex items-center space-x-2 py-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200 font-medium text-sm transition-colors">
+        <i data-lucide="activity" class="w-4 h-4"></i>
+        <span>Chuẩn Đoán & Tự Động Cài Đặt</span>
+      </button>
+      <button id="tab-btn-settings" onclick="switchTab('settings')" class="tab-button flex items-center space-x-2 py-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200 font-medium text-sm transition-colors">
+        <i data-lucide="settings" class="w-4 h-4"></i>
+        <span>Tự Động Đồng Bộ (Auto Healing)</span>
+      </button>
+    </div>
+
+    <!-- TAB 1: DANH SÁCH PROXY -->
+    <div id="tab-content-proxies" class="space-y-6">
+      
+      <!-- Top Action Bar -->
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-slate-900 border border-slate-800 rounded-2xl p-4">
+        <div class="flex items-center space-x-2">
+          <button onclick="openCreateModal(false)" class="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-semibold text-sm transition-all shadow-lg shadow-emerald-500/20">
+            <i data-lucide="plus" class="w-4 h-4 stroke-[3]"></i>
+            <span>Tạo Proxy Mới</span>
+          </button>
+          <button onclick="openCreateModal(true)" class="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-sm border border-slate-700 transition-all">
+            <i data-lucide="layers" class="w-4 h-4"></i>
+            <span>Tạo Hàng Loạt (Bulk)</span>
+          </button>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <button onclick="rotateAllProxies()" class="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 text-xs font-medium transition-colors" title="Đổi địa chỉ IPv6 cho toàn bộ các cổng hiện có">
+            <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
+            <span>Xoay Toàn Bộ IPv6</span>
+          </button>
+
+          <button onclick="exportProxies('standard')" class="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-medium transition-colors" title="Xuất file dạng ip:port">
+            <i data-lucide="download" class="w-3.5 h-3.5"></i>
+            <span>Xuất TXT</span>
+          </button>
+
+          <button onclick="deleteAllProxies()" class="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-xs font-medium transition-colors" title="Xóa toàn bộ">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            <span>Xóa Tất Cả</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Bảng danh sách Proxy -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-slate-950/60 text-slate-400 uppercase text-[11px] font-semibold border-b border-slate-800">
+              <tr>
+                <th class="py-3.5 px-4">Port</th>
+                <th class="py-3.5 px-4">Loại</th>
+                <th class="py-3.5 px-4">Kết Nối Nội Bộ (Inbound)</th>
+                <th class="py-3.5 px-4">IPv6 Ra Internet (Outbound)</th>
+                <th class="py-3.5 px-4">Xác Thực</th>
+                <th class="py-3.5 px-4 text-center">Kiểm Tra</th>
+                <th class="py-3.5 px-4 text-right">Thao Tác</th>
+              </tr>
+            </thead>
+            <tbody id="proxy-table-body" class="divide-y divide-slate-800 font-mono text-xs">
+              <!-- Render động bởi Javascript -->
+              <tr>
+                <td colspan="7" class="py-12 text-center text-slate-400 font-sans">
+                  <div class="flex flex-col items-center justify-center space-y-3">
+                    <i data-lucide="inbox" class="w-10 h-10 text-slate-600"></i>
+                    <span>Chưa có Proxy nào được tạo. Hãy bấm nút "Tạo Proxy Mới" ở trên!</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- TAB 2: CHUẨN ĐOÁN & TỰ ĐỘNG CÀI ĐẶT (SYSTEM HEALTH & AUTO SETUP) -->
+    <div id="tab-content-system" class="space-y-6 hidden">
+      
+      <!-- Banner Hướng Dẫn -->
+      <div class="bg-gradient-to-r from-slate-900 to-slate-800 border border-slate-700/60 rounded-2xl p-6">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div class="space-y-1">
+            <h2 class="text-lg font-bold text-white flex items-center gap-2">
+              <i data-lucide="shield-check" class="w-5 h-5 text-emerald-400"></i>
+              Kiểm Tra Điều Kiện & Tự Động Cài Đặt Hệ Thống
+            </h2>
+            <p class="text-sm text-slate-400 max-w-2xl">
+              Khi bạn vừa ném code lên Mini PC mới, bạn chỉ cần bấm nút bên cạnh. Hệ thống sẽ tự động cấu hình Linux kernel, cài đặt 3proxy, ndppd và mở route IPv6 mà bạn không phải gõ lệnh terminal.
+            </p>
+          </div>
+          <button id="btn-auto-setup" onclick="startAutoSetup()" class="inline-flex items-center justify-center space-x-2 px-6 py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-950 font-bold text-sm shadow-xl shadow-emerald-500/25 transition-all">
+            <i data-lucide="zap" class="w-4 h-4 fill-slate-950"></i>
+            <span>TỰ ĐỘNG CÀI ĐẶT 1-CLICK</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Checklist Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="system-checks-container">
+        <!-- Đèn báo điều kiện render động -->
+        <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 flex items-center space-x-3">
+          <div class="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center animate-spin">
+            <i data-lucide="loader-2" class="w-4 h-4 text-slate-400"></i>
+          </div>
+          <span class="text-sm text-slate-400">Đang đọc thông số từ Mini PC...</span>
+        </div>
+      </div>
+
+      <!-- Live Terminal Output Console -->
+      <div class="bg-[#090d16] border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+        <div class="bg-slate-900/90 px-4 py-2.5 border-b border-slate-800 flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <span class="w-3 h-3 rounded-full bg-red-500/80"></span>
+            <span class="w-3 h-3 rounded-full bg-amber-500/80"></span>
+            <span class="w-3 h-3 rounded-full bg-emerald-500/80"></span>
+            <span class="text-xs font-mono text-slate-400 ml-2">MiniPC Setup Console (Realtime Log)</span>
+          </div>
+          <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-300">Xóa log</button>
+        </div>
+        <div id="setup-terminal" class="p-4 font-mono text-xs text-emerald-400/90 h-64 overflow-y-auto terminal-scroll space-y-1">
+          <p class="text-slate-400">> Chờ lệnh cài đặt... Bấm nút "TỰ ĐỘNG CÀI ĐẶT 1-CLICK" ở trên để bắt đầu.</p>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- TAB 3: AUTO HEALING & SETTINGS -->
+    <div id="tab-content-settings" class="space-y-6 hidden">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6">
+        <div>
+          <h2 class="text-lg font-bold text-white flex items-center gap-2">
+            <i data-lucide="refresh-cw" class="w-5 h-5 text-emerald-400"></i>
+            Cơ Chế Tự Động Thích Ứng Khi Đổi IPv6 (Auto Healing)
+          </h2>
+          <p class="text-sm text-slate-400 mt-1">
+            Mạng gia đình đôi khi khởi động lại modem sẽ đổi dải IPv6 prefix. Dịch vụ ngầm này sẽ liên tục giám sát và tự động cập nhật toàn bộ Proxy sang dải mới mà bạn không cần cấu hình lại.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
+          <div class="space-y-4">
+            <label class="flex items-center space-x-3 cursor-pointer">
+              <input type="checkbox" id="setting-auto-healing" class="w-5 h-5 rounded border-slate-700 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-slate-900 bg-slate-800">
+              <span class="text-sm font-medium text-slate-200">Bật tính năng Auto Healing giám sát tự động</span>
+            </label>
+
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">Chu kỳ kiểm tra (Phút)</label>
+              <input type="number" id="setting-interval" min="1" max="60" value="5" class="w-32 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500">
+            </div>
+
+            <label class="flex items-center space-x-3 cursor-pointer">
+              <input type="checkbox" id="setting-lan-only" class="w-5 h-5 rounded border-slate-700 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-slate-900 bg-slate-800" checked>
+              <div>
+                <span class="text-sm font-medium text-slate-200">Chỉ cho phép mạng LAN kết nối</span>
+                <p class="text-xs text-slate-400">Chặn mọi kết nối từ bên ngoài Internet vào port proxy để bảo mật</p>
+              </div>
+            </label>
+
+            <button onclick="saveSettings()" class="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-sm transition-all shadow-lg shadow-emerald-500/20">
+              Lưu Cài Đặt
+            </button>
+          </div>
+
+          <!-- Lịch sử log đổi IP -->
+          <div class="space-y-2">
+            <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">Lịch Sử Hoạt Động Của Auto Healing</span>
+            <div id="healing-logs-container" class="bg-slate-950 border border-slate-800 rounded-xl p-3 h-52 overflow-y-auto terminal-scroll text-xs font-mono space-y-1.5 text-slate-400">
+              <p>Đang tải lịch sử...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Modal Tạo Proxy (Đơn lẻ & Hàng loạt) -->
+  <div id="create-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-150">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+        <h3 id="modal-title" class="text-lg font-bold text-white flex items-center gap-2">
+          <i data-lucide="plus-circle" class="w-5 h-5 text-emerald-400"></i>
+          <span>Tạo Proxy Mới</span>
+        </h3>
+        <button onclick="closeCreateModal()" class="text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="create-proxy-form" onsubmit="handleCreateProxy(event)" class="space-y-4">
+        <!-- Số lượng (Bulk) -->
+        <div id="form-group-count" class="space-y-1">
+          <label class="block text-xs font-medium text-slate-300">Số lượng Proxy muốn tạo</label>
+          <input type="number" id="input-count" min="1" max="500" value="1" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500">
+          <p class="text-[11px] text-slate-400">Mỗi proxy sẽ được cấp 1 địa chỉ IPv6 ngẫu nhiên khác biệt.</p>
+        </div>
+
+        <!-- Port bắt đầu -->
+        <div class="space-y-1">
+          <label class="block text-xs font-medium text-slate-300">Port bắt đầu</label>
+          <input type="number" id="input-start-port" min="1024" max="65535" placeholder="Để trống sẽ tự động chọn từ 10000" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 font-mono">
+        </div>
+
+        <!-- Loại giao thức -->
+        <div class="space-y-1">
+          <label class="block text-xs font-medium text-slate-300">Giao thức</label>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="flex items-center justify-center p-3 rounded-xl border border-slate-700 bg-slate-800/60 cursor-pointer hover:border-emerald-500 transition-colors">
+              <input type="radio" name="proxy-type" value="http" checked class="text-emerald-500 focus:ring-0 mr-2">
+              <span class="text-sm font-medium text-white">HTTP / HTTPS</span>
+            </label>
+            <label class="flex items-center justify-center p-3 rounded-xl border border-slate-700 bg-slate-800/60 cursor-pointer hover:border-emerald-500 transition-colors">
+              <input type="radio" name="proxy-type" value="socks5" class="text-emerald-500 focus:ring-0 mr-2">
+              <span class="text-sm font-medium text-white">SOCKS5</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Xác thực (Tùy chọn) -->
+        <div class="pt-2 border-t border-slate-800 space-y-3">
+          <span class="text-xs font-medium text-slate-400">Xác thực User / Password (Không bắt buộc)</span>
+          <div class="grid grid-cols-2 gap-3">
+            <input type="text" id="input-username" placeholder="Username" class="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500">
+            <input type="password" id="input-password" placeholder="Password" class="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500">
+          </div>
+        </div>
+
+        <!-- Nút Submit -->
+        <div class="flex items-center justify-end space-x-3 pt-3">
+          <button type="button" onclick="closeCreateModal()" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium">Hủy</button>
+          <button type="submit" id="btn-submit-proxy" class="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-sm shadow-lg shadow-emerald-500/20">Tạo Ngay</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed bottom-6 right-6 max-w-sm bg-slate-900 border border-slate-700 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-3 transform translate-y-24 opacity-0 transition-all duration-300 z-50">
+    <div id="toast-icon"></div>
+    <div id="toast-message" class="text-sm font-medium"></div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
