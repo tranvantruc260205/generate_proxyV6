@@ -38,16 +38,16 @@ generate_proxyV6/
 │   ├── routes/
 │   │   └── api.js              # REST API & SSE Realtime Stream
 │   └── services/
+│       ├── db.js               # Khởi tạo SQLite Database & Schema (SQL chuẩn ACID)
 │       ├── systemService.js    # Chuẩn đoán hệ điều hành, dải IPv6, 1-Click Setup
 │       ├── proxyService.js     # Sinh IP, cấu hình 3proxy, xoay IP, test proxy
 │       ├── autoHealingService.js # Giám sát tự động thích ứng dải IPv6
-│       └── storageService.js   # Quản lý lưu trữ proxies.json & settings.json
+│       └── storageService.js   # DAO: Thực thi câu lệnh SQL (SELECT, INSERT, UPDATE, DELETE)
 ├── public/                     # Giao diện Web Dashboard (Frontend)
 │   ├── index.html              # Trang chủ giao diện
 │   └── app.js                  # Logic tương tác Dashboard & API
-└── data/                       # Thư mục lưu dữ liệu (Tự động sinh khi chạy)
-    ├── proxies.json
-    └── settings.json
+└── data/                       # Thư mục cơ sở dữ liệu (Tự động sinh khi chạy)
+    └── database.sqlite         # File CSDL SQLite thuần chuẩn SQL
 ```
 
 ---
