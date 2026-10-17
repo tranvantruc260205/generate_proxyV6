@@ -30,3 +30,4 @@ echo "✅ Dịch vụ đã được cài đặt và kích hoạt thành công!"
 echo "🔄 Máy chủ sẽ tự khởi động lại dịch vụ nếu Mini PC reboot."
 echo "👉 Kiểm tra trạng thái: sudo systemctl status ipv6-proxy"
 echo "=========================================================="
+

@@ -118,3 +118,4 @@ Từ lúc này, bạn có thể rút bàn phím, màn hình của Mini PC ra. C�
 ## 📌 Giai Đoạn 2 (Học DevOps CI/CD - Tiếp theo)
 Trong buổi tiếp theo, bạn sẽ tự tay tạo pipeline GitHub Actions với file `.github/workflows/deploy.yml` và Self-hosted Runner trên Mini PC để:
 - Mỗi khi `git push` code mới lên GitHub, Mini PC sẽ tự động pull code và reload dịch vụ trong 3 giây!
+

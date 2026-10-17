@@ -556,3 +556,4 @@ function showToast(message, type = 'info') {
     toast.classList.add('translate-y-24', 'opacity-0');
   }, 3500);
 }
+

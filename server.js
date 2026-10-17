@@ -41,3 +41,4 @@ app.listen(PORT, '0.0.0.0', () => {
     autoHealing.startAutoHealing(settings.checkIntervalMinutes || 5);
   }
 });
+
