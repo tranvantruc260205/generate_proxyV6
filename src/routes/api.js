@@ -41,10 +41,10 @@ router.get('/system/setup/stream', (req, res) => {
   });
 });
 
-// 3. Lấy danh sách proxies
-router.get('/proxies', (req, res) => {
+// 3. Lấy danh sách proxies (từ SQLite)
+router.get('/proxies', async (req, res) => {
   try {
-    const proxies = storage.getProxies();
+    const proxies = await storage.getAllProxies();
     const lanIp = system.getLanIp();
     res.json({ success: true, lanIp, count: proxies.length, data: proxies });
   } catch (err) {
@@ -65,7 +65,7 @@ router.post('/proxies', async (req, res) => {
       prefix: prefix
     });
 
-    res.json({ success: true, message: `Đã tạo thành công ${added.length} Proxy!`, data: added });
+    res.json({ success: true, message: `Đã tạo thành công ${added.length} Proxy trong SQLite!`, data: added });
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });
   }
@@ -105,7 +105,7 @@ router.delete('/proxies/:id', async (req, res) => {
 router.delete('/proxies', async (req, res) => {
   try {
     await proxyService.deleteAllProxies();
-    res.json({ success: true, message: 'Đã xóa toàn bộ danh sách Proxy' });
+    res.json({ success: true, message: 'Đã xóa toàn bộ danh sách Proxy trong Database' });
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });
   }
@@ -122,9 +122,9 @@ router.post('/proxies/:id/test', async (req, res) => {
 });
 
 // 10. Export danh sách Proxy ra file TXT
-router.get('/proxies/export', (req, res) => {
+router.get('/proxies/export', async (req, res) => {
   try {
-    const proxies = storage.getProxies();
+    const proxies = await storage.getAllProxies();
     const lanIp = system.getLanIp();
     const format = req.query.format || 'standard'; // standard: ip:port hoặc ip:port:user:pass
 
@@ -151,13 +151,18 @@ router.get('/proxies/export', (req, res) => {
 });
 
 // 11. Cài đặt & Auto Healing
-router.get('/settings', (req, res) => {
-  res.json({ success: true, data: storage.getSettings() });
+router.get('/settings', async (req, res) => {
+  try {
+    const settings = await storage.getSettings();
+    res.json({ success: true, data: settings });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
-router.post('/settings', (req, res) => {
+router.post('/settings', async (req, res) => {
   try {
-    const updated = storage.saveSettings(req.body);
+    const updated = await storage.saveSettings(req.body);
     if (req.body.checkIntervalMinutes || req.body.autoHealing !== undefined) {
       if (updated.autoHealing) {
         autoHealing.startAutoHealing(updated.checkIntervalMinutes);
@@ -171,9 +176,13 @@ router.post('/settings', (req, res) => {
   }
 });
 
-router.get('/auto-healing/logs', (req, res) => {
-  res.json({ success: true, data: autoHealing.getHealingLogs() });
+router.get('/auto-healing/logs', async (req, res) => {
+  try {
+    const logs = await autoHealing.getHealingLogs();
+    res.json({ success: true, data: logs });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 module.exports = router;
-

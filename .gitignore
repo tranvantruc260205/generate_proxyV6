@@ -4,6 +4,8 @@ yarn-debug.log*
 yarn-error.log*
 data/proxies.json
 data/settings.json
+data/*.sqlite*
+data/*.db
 *.log
 .DS_Store
 Thumbs.db

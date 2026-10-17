@@ -25,16 +25,16 @@ function makeFullIpv6(prefix, customSuffix) {
 }
 
 /**
- * Sinh nội dung file 3proxy.cfg từ danh sách proxies trong storage
+ * Sinh nội dung file 3proxy.cfg từ danh sách proxies trong SQLite Database
  */
 async function generate3proxyConfig() {
-  const settings = storage.getSettings();
-  const proxies = storage.getProxies();
+  const settings = await storage.getSettings();
+  const proxies = await storage.getAllProxies();
   const lanIp = system.getLanIp();
 
   let cfg = [];
   cfg.push('# ==========================================');
-  cfg.push('# Tự động sinh bởi MiniPC IPv6 Proxy Manager');
+  cfg.push('# Tự động sinh bởi MiniPC IPv6 Proxy Manager (SQLite)');
   cfg.push(`# Cập nhật lúc: ${new Date().toISOString()}`);
   cfg.push('# ==========================================');
   cfg.push('daemon');
@@ -79,7 +79,7 @@ async function generate3proxyConfig() {
     }
 
     const type = p.type || 'http';
-    const internalBind = p.bindIp || lanIp || '0.0.0.0';
+    const internalBind = lanIp || '0.0.0.0';
 
     if (type === 'socks5' || type === 'socks') {
       // SOCKS5 Proxy
@@ -133,7 +133,7 @@ async function applyAndReload() {
 }
 
 /**
- * Thêm một hoặc nhiều Proxy
+ * Thêm một hoặc nhiều Proxy vào SQL
  */
 async function addProxies({ count = 1, startPort, type = 'http', username = '', password = '', prefix }) {
   let detectedPrefix = prefix;
@@ -147,7 +147,7 @@ async function addProxies({ count = 1, startPort, type = 'http', username = '', 
     throw new Error('Chưa phát hiện được dải IPv6 Prefix của nhà mạng! Vui lòng kiểm tra lại kết nối mạng.');
   }
 
-  const currentProxies = storage.getProxies();
+  const currentProxies = await storage.getAllProxies();
   const existingPorts = new Set(currentProxies.map(p => Number(p.port)));
 
   let currentPort = Number(startPort);
@@ -185,8 +185,8 @@ async function addProxies({ count = 1, startPort, type = 'http', username = '', 
     currentPort++;
   }
 
-  const updatedList = [...currentProxies, ...newProxies];
-  storage.saveProxies(updatedList);
+  // Insert vào SQL Database
+  await storage.insertProxies(newProxies);
 
   await applyAndReload();
   return newProxies;
@@ -196,62 +196,49 @@ async function addProxies({ count = 1, startPort, type = 'http', username = '', 
  * Xoay IP (Rotate) cho 1 proxy cụ thể
  */
 async function rotateProxyIp(proxyId) {
-  const proxies = storage.getProxies();
-  const proxyIndex = proxies.findIndex(p => p.id === proxyId);
-
-  if (proxyIndex === -1) {
-    throw new Error('Không tìm thấy Proxy cần xoay IP');
+  const proxy = await storage.getProxyById(proxyId);
+  if (!proxy) {
+    throw new Error('Không tìm thấy Proxy cần xoay IP trong cơ sở dữ liệu');
   }
 
   const iface = await system.getDefaultInterface();
   const ipv6Info = await system.getIpv6Prefix(iface);
-  const activePrefix = ipv6Info.prefix || proxies[proxyIndex].prefix;
+  const activePrefix = ipv6Info.prefix || proxy.prefix;
 
   const newSuffix = generateRandomIpv6Suffix();
   const newIpv6 = `${activePrefix}::${newSuffix}`;
 
-  proxies[proxyIndex].outboundIpv6 = newIpv6;
-  proxies[proxyIndex].prefix = activePrefix;
-  proxies[proxyIndex].lastRotatedAt = new Date().toISOString();
-
-  storage.saveProxies(proxies);
+  const updated = await storage.updateProxyOutbound(proxyId, newIpv6, activePrefix);
   await applyAndReload();
 
-  return proxies[proxyIndex];
+  return updated;
 }
 
 /**
- * Xoay IP cho TOÀN BỘ danh sách proxies
+ * Xoay IP cho TOÀN BỘ danh sách proxies trong SQL
  */
 async function rotateAllProxies() {
-  const proxies = storage.getProxies();
-  if (proxies.length === 0) return [];
-
   const iface = await system.getDefaultInterface();
   const ipv6Info = await system.getIpv6Prefix(iface);
   const defaultPrefix = ipv6Info.prefix;
 
-  for (let p of proxies) {
-    const prefixToUse = defaultPrefix || p.prefix;
-    if (prefixToUse) {
-      p.outboundIpv6 = `${prefixToUse}::${generateRandomIpv6Suffix()}`;
-      p.prefix = prefixToUse;
-      p.lastRotatedAt = new Date().toISOString();
-    }
-  }
+  const updatedList = await storage.updateAllProxiesOutbound((proxy) => {
+    const prefixToUse = defaultPrefix || proxy.prefix;
+    return {
+      prefix: prefixToUse,
+      newIpv6: `${prefixToUse}::${generateRandomIpv6Suffix()}`
+    };
+  });
 
-  storage.saveProxies(proxies);
   await applyAndReload();
-  return proxies;
+  return updatedList;
 }
 
 /**
  * Xóa một proxy theo ID
  */
 async function deleteProxy(proxyId) {
-  const proxies = storage.getProxies();
-  const filtered = proxies.filter(p => p.id !== proxyId);
-  storage.saveProxies(filtered);
+  await storage.deleteProxyById(proxyId);
   await applyAndReload();
   return true;
 }
@@ -260,7 +247,7 @@ async function deleteProxy(proxyId) {
  * Xóa toàn bộ proxies
  */
 async function deleteAllProxies() {
-  storage.saveProxies([]);
+  await storage.deleteAllProxies();
   await applyAndReload();
   return true;
 }
@@ -269,9 +256,8 @@ async function deleteAllProxies() {
  * Test kết nối của 1 Proxy (dùng curl để kiểm tra ra ngoài)
  */
 async function testProxy(proxyId) {
-  const proxies = storage.getProxies();
-  const p = proxies.find(item => item.id === proxyId);
-  if (!p) throw new Error('Không tìm thấy Proxy');
+  const p = await storage.getProxyById(proxyId);
+  if (!p) throw new Error('Không tìm thấy Proxy trong cơ sở dữ liệu');
 
   const lanIp = system.getLanIp();
   const proxyUrl = p.username && p.password
@@ -290,7 +276,7 @@ async function testProxy(proxyId) {
     };
   }
 
-  // Gọi curl qua proxy tới API kiểm tra IP công khai có hỗ trợ IPv6 (api64.ipify.org hoặc ifconfig.co)
+  // Gọi curl qua proxy tới API kiểm tra IP công khai có hỗ trợ IPv6
   const startTime = Date.now();
   const cmd = `curl -s -m 8 -x "${proxyUrl}" https://api64.ipify.org || curl -s -m 8 -x "${proxyUrl}" https://ipv6.icanhazip.com`;
   const res = await system.runCmd(cmd);
@@ -319,4 +305,3 @@ module.exports = {
   makeFullIpv6,
   generateRandomIpv6Suffix
 };
-
