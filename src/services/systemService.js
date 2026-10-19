@@ -67,13 +67,13 @@ async function getIpv6Prefix(ifaceName) {
 
   const iface = ifaceName || await getDefaultInterface();
   
-  // 1. Quét trên card mạng chính, lọc ra các IP Global Unicast (bắt đầu bằng 2... hoặc 3...)
-  const cmd = `ip -6 addr show dev ${iface} scope global | grep -v "scope host" | grep -v "fe80:" | grep -v "fd" | grep -v "fc" | grep inet6 | awk '{print $2}'`;
+  // 1. Quét trên card mạng chính, chỉ lấy các IP Global Unicast (bắt đầu bằng 2... hoặc 3...)
+  const cmd = `ip -6 addr show dev ${iface} scope global | grep -E 'inet6 [23]' | awk '{print $2}'`;
   let res = await runCmd(cmd);
 
   // Nếu trên card chính chưa thấy, quét toàn bộ interfaces
   if (!res.stdout) {
-    const cmdAll = `ip -6 addr show scope global | grep -v "scope host" | grep -v "fe80:" | grep -v "fd" | grep -v "fc" | grep inet6 | awk '{print $2}'`;
+    const cmdAll = `ip -6 addr show scope global | grep -E 'inet6 [23]' | awk '{print $2}'`;
     res = await runCmd(cmdAll);
   }
 
@@ -313,7 +313,7 @@ EOF
     if [ -z "$IFACE" ]; then IFACE="enp3s0"; fi
     
     # Lấy prefix public bắt đầu bằng 2... hoặc 3...
-    IPV6_PREFIX=$(ip -6 addr show scope global | grep -v "scope host" | grep -v "fe80:" | grep -v "fd" | grep -v "fc" | grep inet6 | head -n1 | awk '{print $2}' | cut -d: -f1-4)
+    IPV6_PREFIX=$(ip -6 addr show scope global | grep -E 'inet6 [23]' | head -n1 | awk '{print $2}' | cut -d: -f1-4)
     if [ -z "$IPV6_PREFIX" ]; then
       IPV6_PREFIX=$(curl -s -6 -m 3 https://api64.ipify.org 2>/dev/null | cut -d: -f1-4 || true)
     fi

@@ -82,11 +82,11 @@ async function generate3proxyConfig() {
     const internalBind = lanIp || '0.0.0.0';
 
     if (type === 'socks5' || type === 'socks') {
-      // SOCKS5 Proxy
-      cfg.push(`socks -p${p.port} -e${p.outboundIpv6}`);
+      // SOCKS5 Proxy - Thuần IPv6 (Không rò rỉ IPv4)
+      cfg.push(`socks -p${p.port} -6 -e${p.outboundIpv6}`);
     } else {
-      // HTTP/HTTPS Proxy
-      cfg.push(`proxy -p${p.port} -e${p.outboundIpv6}`);
+      // HTTP/HTTPS Proxy - Thuần IPv6 (Không rò rỉ IPv4)
+      cfg.push(`proxy -p${p.port} -6 -e${p.outboundIpv6}`);
     }
 
     // Reset lại auth
