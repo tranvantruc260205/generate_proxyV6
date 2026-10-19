@@ -83,10 +83,10 @@ async function generate3proxyConfig() {
 
     if (type === 'socks5' || type === 'socks') {
       // SOCKS5 Proxy
-      cfg.push(`socks -p${p.port} -i${internalBind} -e${p.outboundIpv6}`);
+      cfg.push(`socks -p${p.port} -e${p.outboundIpv6}`);
     } else {
       // HTTP/HTTPS Proxy
-      cfg.push(`proxy -p${p.port} -i${internalBind} -e${p.outboundIpv6}`);
+      cfg.push(`proxy -p${p.port} -e${p.outboundIpv6}`);
     }
 
     // Reset lại auth
