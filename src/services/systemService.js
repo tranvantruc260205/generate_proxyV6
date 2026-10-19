@@ -66,37 +66,63 @@ async function getIpv6Prefix(ifaceName) {
   }
 
   const iface = ifaceName || await getDefaultInterface();
-  // Lấy các địa chỉ inet6 global (loại trừ link-local fe80:: và ULA fc00::/fd00::)
-  const cmd = `ip -6 addr show dev ${iface} scope global | grep -v "scope host" | grep -v "fe80:" | grep inet6 | awk '{print $2}'`;
-  const res = await runCmd(cmd);
+  
+  // 1. Quét trên card mạng chính, lọc ra các IP Global Unicast (bắt đầu bằng 2... hoặc 3...)
+  const cmd = `ip -6 addr show dev ${iface} scope global | grep -v "scope host" | grep -v "fe80:" | grep -v "fd" | grep -v "fc" | grep inet6 | awk '{print $2}'`;
+  let res = await runCmd(cmd);
 
+  // Nếu trên card chính chưa thấy, quét toàn bộ interfaces
   if (!res.stdout) {
-    return { prefix: null, cidr: null, found: false };
+    const cmdAll = `ip -6 addr show scope global | grep -v "scope host" | grep -v "fe80:" | grep -v "fd" | grep -v "fc" | grep inet6 | awk '{print $2}'`;
+    res = await runCmd(cmdAll);
   }
 
-  const lines = res.stdout.split('\n');
-  for (const line of lines) {
-    const cleanLine = line.trim();
-    if (!cleanLine) continue;
+  if (res.stdout) {
+    const lines = res.stdout.split('\n');
+    for (const line of lines) {
+      const cleanLine = line.trim();
+      if (!cleanLine) continue;
 
-    const [addrWithMask] = cleanLine.split(' ');
-    const [addr, mask] = addrWithMask.split('/');
+      const [addrWithMask] = cleanLine.split(' ');
+      const [addr, mask] = addrWithMask.split('/');
 
-    // Mở rộng các dấu :: nếu có để bóc tách 4 cụm đầu (64 bit đầu)
-    const parts = addr.split(':');
-    if (parts.length >= 4) {
-      // Lấy 4 cụm hex đầu tiên làm prefix /64
-      const prefix = parts.slice(0, 4).join(':');
-      return {
-        prefix: prefix,
-        cidr: `${prefix}::/64`,
-        found: true,
-        fullIp: addr,
-        mask: mask || '64',
-        interface: iface
-      };
+      // Chỉ lấy địa chỉ bắt đầu bằng 2 hoặc 3 (IPv6 Public Internet)
+      if (addr.startsWith('2') || addr.startsWith('3')) {
+        const parts = addr.split(':');
+        if (parts.length >= 4) {
+          const prefix = parts.slice(0, 4).join(':');
+          return {
+            prefix: prefix,
+            cidr: `${prefix}::/64`,
+            found: true,
+            fullIp: addr,
+            mask: mask || '64',
+            interface: iface
+          };
+        }
+      }
     }
   }
+
+  // 2. Dự phòng: Nếu ip addr chưa kịp cập nhật, query trực tiếp qua curl ra ngoài
+  try {
+    const curlRes = await runCmd('curl -s -6 -m 3 https://api64.ipify.org || curl -s -6 -m 3 https://ipv6.icanhazip.com');
+    const pubIp = curlRes.stdout.trim();
+    if (pubIp && (pubIp.startsWith('2') || pubIp.startsWith('3')) && pubIp.includes(':')) {
+      const parts = pubIp.split(':');
+      if (parts.length >= 4) {
+        const prefix = parts.slice(0, 4).join(':');
+        return {
+          prefix: prefix,
+          cidr: `${prefix}::/64`,
+          found: true,
+          fullIp: pubIp,
+          mask: '64',
+          interface: iface
+        };
+      }
+    }
+  } catch (e) {}
 
   return { prefix: null, cidr: null, found: false };
 }
@@ -233,12 +259,47 @@ function runAutoSetup(onLog, onComplete) {
 
   const setupProcess = spawn('bash', ['-c', `
     set -e
-    echo "[1/6] Cài đặt các gói phụ trợ (3proxy, ndppd, curl, iptables)..."
+    echo "[1/6] Cài đặt các gói phụ trợ (build-essential, git, ndppd, curl, iptables)..."
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq
-    apt-get install -y -qq 3proxy ndppd curl iptables openssl >/dev/null 2>&1
+    apt-get install -y -qq build-essential git ndppd curl iptables openssl >/dev/null 2>&1 || true
 
-    echo "[2/6] Bật cấu hình sysctl cho kernel Linux..."
+    echo "[2/6] Kiểm tra và chuẩn bị 3proxy..."
+    PROXY_BIN=$(which 3proxy 2>/dev/null || true)
+    if [ -z "$PROXY_BIN" ]; then
+      echo "      3proxy chưa có, đang tải và biên dịch nhanh từ GitHub..."
+      rm -rf /tmp/3proxy-build
+      git clone --depth=1 https://github.com/3proxy/3proxy.git /tmp/3proxy-build >/dev/null 2>&1
+      make -C /tmp/3proxy-build -f Makefile.Linux >/dev/null 2>&1
+      make -C /tmp/3proxy-build -f Makefile.Linux install >/dev/null 2>&1
+      rm -rf /tmp/3proxy-build
+      PROXY_BIN=$(which 3proxy 2>/dev/null || echo "/usr/local/bin/3proxy")
+    fi
+    echo "      Đã sẵn sàng 3proxy tại: $PROXY_BIN"
+
+    # Tạo thư mục config 3proxy
+    mkdir -p /etc/3proxy
+    touch /etc/3proxy/3proxy.cfg
+
+    # Tạo systemd service cho 3proxy nếu chưa có
+    cat << EOF > /etc/systemd/system/3proxy.service
+[Unit]
+Description=3proxy Tiny Proxy Server
+After=network.target
+
+[Service]
+Type=forking
+ExecStart=$PROXY_BIN /etc/3proxy/3proxy.cfg
+KillMode=process
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload
+    systemctl enable 3proxy >/dev/null 2>&1 || true
+
+    echo "[3/6] Bật cấu hình sysctl cho kernel Linux..."
     cat << 'EOF' > /etc/sysctl.d/99-ipv6-proxy.conf
 net.ipv6.ip_nonlocal_bind=1
 net.ipv6.conf.all.forwarding=1
@@ -247,18 +308,22 @@ net.ipv6.conf.all.proxy_ndp=1
 EOF
     sysctl -p /etc/sysctl.d/99-ipv6-proxy.conf >/dev/null 2>&1 || sysctl -w net.ipv6.ip_nonlocal_bind=1
 
-    echo "[3/6] Phát hiện card mạng và dải IPv6..."
+    echo "[4/6] Phát hiện card mạng và dải IPv6 Public..."
     IFACE=$(ip route | grep default | awk '{print $5}' | head -n1)
-    if [ -z "$IFACE" ]; then IFACE="eth0"; fi
+    if [ -z "$IFACE" ]; then IFACE="enp3s0"; fi
     
-    IPV6_PREFIX=$(ip -6 addr show dev $IFACE scope global | grep -v "scope host" | grep -v "fe80:" | grep inet6 | head -n1 | awk '{print $2}' | cut -d: -f1-4)
+    # Lấy prefix public bắt đầu bằng 2... hoặc 3...
+    IPV6_PREFIX=$(ip -6 addr show scope global | grep -v "scope host" | grep -v "fe80:" | grep -v "fd" | grep -v "fc" | grep inet6 | head -n1 | awk '{print $2}' | cut -d: -f1-4)
+    if [ -z "$IPV6_PREFIX" ]; then
+      IPV6_PREFIX=$(curl -s -6 -m 3 https://api64.ipify.org 2>/dev/null | cut -d: -f1-4 || true)
+    fi
 
     if [ -n "$IPV6_PREFIX" ]; then
-      echo "      Tìm thấy dải IPv6: \${IPV6_PREFIX}::/64 trên card $IFACE"
-      echo "[4/6] Cấu hình route local cho dải IPv6..."
+      echo "      Tìm thấy dải IPv6 Public: \${IPV6_PREFIX}::/64 trên card $IFACE"
+      echo "[5/6] Cấu hình route local cho dải IPv6..."
       ip -6 route add local \${IPV6_PREFIX}::/64 dev lo 2>/dev/null || true
 
-      echo "[5/6] Khởi tạo cấu hình cho ndppd (/etc/ndppd.conf)..."
+      echo "[6/6] Khởi tạo cấu hình cho ndppd (/etc/ndppd.conf)..."
       cat << 'EOF' > /etc/ndppd.conf
 route-ttl 30000
 proxy IFACE_PLACEHOLDER {
@@ -276,13 +341,8 @@ EOF
       systemctl enable ndppd >/dev/null 2>&1 || true
       systemctl restart ndppd >/dev/null 2>&1 || true
     else
-      echo "      [CẢNH BÁO] Chưa tìm thấy dải IPv6 public! ndppd sẽ được cấu hình sau khi router cấp IPv6."
+      echo "      [CẢNH BÁO] Chưa tìm thấy dải IPv6 public! ndppd sẽ được cấu hình sau."
     fi
-
-    echo "[6/6] Chuẩn bị thư mục cấu hình 3proxy..."
-    mkdir -p /etc/3proxy
-    touch /etc/3proxy/3proxy.cfg
-    systemctl enable 3proxy >/dev/null 2>&1 || true
 
     echo "=== HOÀN TẤT THIẾT LẬP HỆ THỐNG THÀNH CÔNG! ==="
   `]);
